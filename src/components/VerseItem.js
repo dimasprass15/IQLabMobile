@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
 
 const VerseItem = React.memo(({ 
   verse, 
@@ -13,98 +14,157 @@ const VerseItem = React.memo(({
   fontFamily,
   onAuthRestricted,
   isLoggedIn,
-  isInteractiveActive,
-  isPassed,
-  isLocked,
-  onSend
+  onShare,
+  fontSize,
+  highlightKeyword,
+  onBookmark,
+  isBookmarked,
+  onCheckpoint,
+  isCheckpoint,
+  onVerseTouch,
+  othersCount = 0
 }) => {
+  const { isDarkMode } = useTheme();
+  const theme = isDarkMode ? {
+    cardBg: '#1e293b',
+    border: '#334155',
+    textMain: '#f8fafc',
+    textSub: '#94a3b8',
+    itemBg: '#0f172a',
+    btnBg: '#334155'
+  } : {
+    cardBg: '#ffffff',
+    border: '#f1f5f9',
+    textMain: '#0f172a',
+    textSub: '#64748b',
+    itemBg: '#ffffff',
+    btnBg: '#f8fafc'
+  };
+
+  const renderHighlightedTranslation = (text, keyword) => {
+    if (!text) return null;
+    const cleanText = text.replace(/<sup[^>]*>.*?<\/sup>/g, '');
+    
+    if (!keyword) {
+      return <Text style={styles.verseTranslationText}>{cleanText}</Text>;
+    }
+    
+    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = cleanText.split(new RegExp(`(\\b${escapedKeyword}\\b)`, 'gi'));
+    
+    return (
+      <Text style={styles.verseTranslationText}>
+        {parts.map((part, index) => 
+          part.toLowerCase() === keyword.toLowerCase() ? (
+            <Text key={index} style={styles.highlightText}>{part}</Text>
+          ) : (
+            part
+          )
+        )}
+      </Text>
+    );
+  };
+
   return (
-    <View style={styles.verseCardModal}>
-      <View style={styles.verseCardTop}>
-        <View style={{flexDirection: 'row', alignItems: 'center'}}>
-          <View style={styles.verseNumberBox}><Text style={styles.verseNumberText}>{verse.ayat}</Text></View>
-          <View style={styles.actionCircleBtnGroup}>
-            <TouchableOpacity onPress={() => onPlay(surahId, verse.ayat)} style={[styles.actionCircleBtn, isPlaying && styles.actionCircleBtnActive]}>
-              <FontAwesome5 name={isPlaying ? 'pause' : 'play'} size={12} color={isPlaying ? '#ffffff' : '#3b82f6'} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => onAuthRestricted(() => console.log('Bookmark'))} 
-              style={[styles.actionCircleBtn, isLoggedIn && { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}
-            >
-              <FontAwesome5 name="bookmark" size={12} color={isLoggedIn ? '#16a34a' : '#64748b'} />
-            </TouchableOpacity>
+    <TouchableOpacity 
+      activeOpacity={0.85} 
+      onPress={onVerseTouch}
+      style={styles.touchWrapper}
+    >
+      <View style={[styles.verseCardModal, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+        <View style={styles.verseCardTop}>
+          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1}}>
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <View style={[styles.verseNumberBox, { backgroundColor: theme.itemBg, borderColor: theme.border }, othersCount > 0 && styles.verseNumberBoxActive]}>
+                <Text style={[styles.verseNumberText, othersCount > 0 && styles.verseNumberTextActive]}>{verse.ayat}</Text>
+              </View>
+              <View style={[styles.actionCircleBtnGroup, { backgroundColor: theme.btnBg, borderColor: theme.border }]}>
+                <TouchableOpacity onPress={() => onPlay(surahId, verse.ayat)} style={[styles.actionCircleBtn, { backgroundColor: theme.cardBg, borderColor: theme.border }, isPlaying && styles.actionCircleBtnActive]}>
+                  <FontAwesome5 name={isPlaying ? 'pause' : 'play'} size={12} color={isPlaying ? '#ffffff' : '#3b82f6'} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => onAuthRestricted(onBookmark)} 
+                  style={[styles.actionCircleBtn, { backgroundColor: theme.cardBg, borderColor: theme.border }, isBookmarked && { backgroundColor: isDarkMode ? '#78350f' : '#fffbeb', borderColor: isDarkMode ? '#92400e' : '#fef3c7' }]}
+                >
+                  <FontAwesome5 name="bookmark" size={11} color={isBookmarked ? '#d97706' : theme.textSub} solid={isBookmarked} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => onAuthRestricted(onCheckpoint)} 
+                  style={[styles.actionCircleBtn, { backgroundColor: theme.cardBg, borderColor: theme.border }, isCheckpoint && { backgroundColor: isDarkMode ? '#7f1d1d' : '#fef2f2', borderColor: isDarkMode ? '#991b1b' : '#fecaca' }]}
+                >
+                  <FontAwesome5 name="flag" size={11} color={isCheckpoint ? '#ef4444' : theme.textSub} solid={isCheckpoint} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {othersCount > 0 && (
+              <View style={styles.verseOthersBadge}>
+                <FontAwesome5 name="users" size={10} color="#3b82f6" style={{marginRight: 4}} />
+                <Text style={styles.verseOthersText}>{othersCount} Sahabat</Text>
+              </View>
+            )}
           </View>
         </View>
-      </View>
 
-      <View style={styles.verseTagsRow}>
-        <TouchableOpacity 
-          style={[styles.tafsirTag, isExpanded && { backgroundColor: '#fef3c7', borderColor: '#d97706' }]} 
-          onPress={() => onToggleTafsir(verse.ayat)}
-          activeOpacity={0.7}
-        >
-          <Feather name="book-open" size={13} color="#d97706" style={{marginRight: 6}} />
-          <Text style={styles.tafsirTagText}>Tafsir</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tagBase, isLoggedIn ? styles.tajwidTagActive : styles.grayTag]} 
-          onPress={() => onAuthRestricted(() => console.log('Tajwid'))}
-        >
-          <Feather name="edit-2" size={13} color={isLoggedIn ? '#9333ea' : '#94a3b8'} style={{marginRight: 6}} />
-          <Text style={[styles.tagTextBase, isLoggedIn ? styles.tajwidTagTextActive : styles.grayTagText]}>Tajwid</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tagBase, isLoggedIn ? styles.shareTagActive : styles.grayTag]} 
-          onPress={() => onAuthRestricted(() => console.log('Share'))}
-        >
-          <Feather name="share-2" size={13} color={isLoggedIn ? '#2563eb' : '#94a3b8'} style={{marginRight: 6}} />
-          <Text style={[styles.tagTextBase, isLoggedIn ? styles.shareTagTextActive : styles.grayTagText]}>Share</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[
-            styles.tagBase, 
-            (isLoggedIn && isInteractiveActive) ? styles.kirimTagActive : 
-            (isLoggedIn && isPassed) ? styles.passedTag : 
-            styles.grayTag
-          ]} 
-          onPress={() => onAuthRestricted(onSend)}
-          disabled={!isInteractiveActive}
-        >
-          <Feather 
-            name={isPassed ? "check-circle" : isLocked ? "lock" : "send"} 
-            size={13} 
-            color={(isLoggedIn && isInteractiveActive) ? '#059669' : (isLoggedIn && isPassed) ? '#16a34a' : '#94a3b8'} 
-            style={{marginRight: 6}} 
-          />
-          <Text style={[
-            styles.tagTextBase, 
-            (isLoggedIn && isInteractiveActive) ? styles.kirimTagTextActive : 
-            (isLoggedIn && isPassed) ? styles.passedTagText : 
-            styles.grayTagText
-          ]}>
-             {isPassed ? 'Lulus' : isLocked ? 'Terkunci' : 'Kirim'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.verseTagsRow}>
+          <TouchableOpacity 
+            style={[styles.tafsirTag, isDarkMode && { backgroundColor: '#78350f', borderColor: '#92400e' }, isExpanded && { backgroundColor: isDarkMode ? '#92400e' : '#fef3c7', borderColor: '#d97706' }]} 
+            onPress={() => onToggleTafsir(verse.ayat)}
+            activeOpacity={0.7}
+          >
+            <Feather name="book-open" size={13} color={isDarkMode ? '#fcd34d' : '#d97706'} style={{marginRight: 6}} />
+            <Text style={[styles.tafsirTagText, isDarkMode && { color: '#fcd34d' }]}>Tafsir</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tagBase, isLoggedIn ? (isDarkMode ? { backgroundColor: '#4c1d95', borderColor: '#5b21b6' } : styles.tajwidTagActive) : [styles.grayTag, { backgroundColor: theme.btnBg, borderColor: theme.border }]]} 
+            onPress={() => onAuthRestricted(() => console.log('Tajwid'))}
+          >
+            <Feather name="edit-2" size={13} color={isLoggedIn ? (isDarkMode ? '#d8b4fe' : '#9333ea') : theme.textSub} style={{marginRight: 6}} />
+            <Text style={[styles.tagTextBase, isLoggedIn ? (isDarkMode ? { color: '#d8b4fe' } : styles.tajwidTagTextActive) : { color: theme.textSub }]}>Tajwid</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.tagBase, isLoggedIn ? (isDarkMode ? { backgroundColor: '#1e3a8a', borderColor: '#1e40af' } : styles.shareTagActive) : [styles.grayTag, { backgroundColor: theme.btnBg, borderColor: theme.border }]]} 
+            onPress={onShare}
+          >
+            <Feather name="share-2" size={13} color={isLoggedIn ? (isDarkMode ? '#93c5fd' : '#2563eb') : theme.textSub} style={{marginRight: 6}} />
+            <Text style={[styles.tagTextBase, isLoggedIn ? (isDarkMode ? { color: '#93c5fd' } : styles.shareTagTextActive) : { color: theme.textSub }]}>Share</Text>
+          </TouchableOpacity>
+          
 
-      <View style={styles.verseTextContainer}>
-        <Text style={[styles.verseArabicText, { fontFamily: fontFamily || 'Uthmanic-Neo-Color' }]}>{verse.teks_arab}</Text>
-        <Text style={styles.verseTranslationText}>{verse.terjemahan.replace(/<sup[^>]*>.*?<\/sup>/g, '')}</Text>
-      </View>
-
-      {isExpanded && (
-        <View style={styles.tafsirContainer}>
-          <Text style={styles.tafsirTitle}>📖 Tafsir Kemenag - Ayat {verse.ayat}</Text>
-          <Text style={styles.tafsirBody}>{tafsirText || 'Sedang memuat tafsir, mohon tunggu sebentar...'}</Text>
         </View>
-      )}
-    </View>
+
+        <View style={[styles.verseTextContainer, { borderBottomColor: theme.border }]}>
+          <Text style={[
+            styles.verseArabicText, 
+            { 
+              fontFamily: fontFamily || 'Uthmanic-Neo-Color',
+              fontSize: fontSize || 30,
+              lineHeight: (fontSize || 30) * 1.8,
+              color: theme.textMain
+            }
+          ]}>
+            {verse.teks_arab}
+          </Text>
+          {renderHighlightedTranslation(verse.terjemahan, highlightKeyword)}
+        </View>
+
+        {isExpanded && (
+          <View style={[styles.tafsirContainer, { backgroundColor: theme.btnBg, borderColor: theme.border }]}>
+            <Text style={[styles.tafsirTitle, { color: theme.textMain }]}>📖 Tafsir Kemenag - Ayat {verse.ayat}</Text>
+            <Text style={[styles.tafsirBody, { color: theme.textSub }]}>{tafsirText || 'Sedang memuat tafsir, mohon tunggu sebentar...'}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 });
 
 const styles = StyleSheet.create({
+  touchWrapper: {
+    width: '100%',
+    marginBottom: 12,
+  },
   verseCardModal: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
@@ -227,20 +287,7 @@ const styles = StyleSheet.create({
   shareTagTextActive: {
     color: '#2563eb',
   },
-  kirimTagActive: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#d1fae5',
-  },
-  kirimTagTextActive: {
-    color: '#059669',
-  },
-  passedTag: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#bbf7d0',
-  },
-  passedTagText: {
-    color: '#16a34a',
-  },
+
   verseTextContainer: {
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -278,6 +325,40 @@ const styles = StyleSheet.create({
     color: '#475569',
     lineHeight: 24,
   },
+  highlightText: {
+    backgroundColor: '#fde047',
+    color: '#1e3a8a',
+    fontWeight: 'bold',
+    borderRadius: 4,
+    paddingHorizontal: 2,
+    overflow: 'hidden',
+  },
+  verseNumberBoxActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+    borderWidth: 2,
+    shadowColor: '#3b82f6',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  verseNumberTextActive: {
+    color: '#1d4ed8',
+  },
+  verseOthersBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  verseOthersText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#3b82f6',
+  }
 });
 
 export default VerseItem;

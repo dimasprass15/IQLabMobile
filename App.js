@@ -1,86 +1,200 @@
 import { useState, useEffect, useRef } from 'react';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Animated, Platform, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Animated, Platform, Dimensions, ActivityIndicator, LogBox } from 'react-native';
+
+// Suppress warning dari react-native-render-html (library issue, bukan bug kita)
+LogBox.ignoreLogs([
+  'Support for defaultProps will be removed',
+]);
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+const navigationRef = createNavigationContainerRef();
 
 SplashScreen.preventAutoHideAsync();
 
+const Stack = createNativeStackNavigator();
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+const Tab = createBottomTabNavigator();
+
 import HomeScreen from './src/screens/HomeScreen';
 import InteractiveQuranScreen from './src/screens/InteractiveQuranScreen';
-import AdminScreen from './src/screens/AdminScreen';
-import PengajarScreen from './src/screens/PengajarScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import ContentScreen from './src/screens/ContentScreen';
+import AnnouncementDetailScreen from './src/screens/AnnouncementDetailScreen';
+import AnimatedTabBar from './src/components/navigation/AnimatedTabBar';
 import { supabase } from './src/lib/supabase';
+import { databaseService } from './src/services/databaseService';
+import { ThemeProvider } from './src/context/ThemeContext';
+import { notificationService } from './src/services/notificationService';
+
+function MainTabs({ session }) {
+  return (
+    <Tab.Navigator
+      initialRouteName="Home"
+      tabBar={props => <AnimatedTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Content">
+        {props => <ContentScreen {...props} session={session} />}
+      </Tab.Screen>
+      <Tab.Screen name="Home">
+        {props => <HomeScreen {...props} session={session} />}
+      </Tab.Screen>
+      <Tab.Screen name="Profile">
+        {props => <ProfileScreen {...props} session={session} />}
+      </Tab.Screen>
+    </Tab.Navigator>
+  );
+}
+
 
 const screenWidth = Dimensions.get('window').width;
 
-const CustomToastLayout = ({ text1, text2, type, icon }) => {
-  const slideAnim = useRef(new Animated.Value(screenWidth)).current;
+import { toastConfig } from './src/lib/toastConfig';
 
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      tension: 20,
-      friction: 7,
-      useNativeDriver: true,
-    }).start();
-  }, []);
 
-  const backgroundColor = 
-    type === 'success' ? 'rgba(16, 185, 129, 0.95)' :
-    type === 'error' ? 'rgba(239, 68, 68, 0.95)' :
-    'rgba(30, 58, 138, 0.95)';
-
-  return (
-    <Animated.View style={[styles.customToast, { backgroundColor, transform: [{ translateX: slideAnim }] }]}>
-      <View style={styles.toastIconBox}>
-         <Feather name={icon} size={28} color="white" />
-      </View>
-      <View style={styles.toastContent}>
-        <Text style={styles.toastText1}>{text1}</Text>
-        {text2 && <Text style={styles.toastText2}>{text2}</Text>}
-      </View>
-    </Animated.View>
-  );
-};
-
-const toastConfig = {
-  success: (props) => (
-    <CustomToastLayout {...props} type="success" icon="check-circle" />
-  ),
-  error: (props) => (
-    <CustomToastLayout {...props} type="error" icon="alert-circle" />
-  ),
-  info: (props) => (
-    <CustomToastLayout {...props} type="info" icon="info" />
-  )
-};
+import { profileService } from './src/services/profileService';
+import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
 
 export default function App() {
   const [isShowSplash, setIsShowSplash] = useState(true);
-  const [currentScreen, setCurrentScreen] = useState('home');
   const [session, setSession] = useState(null);
+  const [isProfileChecking, setIsProfileChecking] = useState(true);
+  const [hasProfile, setHasProfile] = useState(false);
+
+  // Helper: Navigasi ke detail pengumuman dari data notifikasi
+  const navigateToAnnouncement = async (announcementId) => {
+    if (!announcementId) return;
+    console.log('[App] Navigasi ke pengumuman:', announcementId);
+    try {
+      const { data: announcement } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('id', announcementId)
+        .single();
+      
+      if (announcement) {
+        // Tunggu sampai navigation ready
+        const waitForNav = () => {
+          if (navigationRef.isReady()) {
+            navigationRef.navigate('AnnouncementDetail', { announcement });
+          } else {
+            setTimeout(waitForNav, 300);
+          }
+        };
+        waitForNav();
+      }
+    } catch (err) {
+      console.error('[App] Gagal ambil data pengumuman:', err);
+    }
+  };
+
+  // --- PUSH NOTIFICATION EFFECT ---
+  useEffect(() => {
+    if (session?.user && hasProfile) {
+      console.log('[App] Initializing Notifications for user:', session.user.id);
+      
+      // 1. Daftar Token
+      notificationService.registerForPushNotificationsAsync().then(token => {
+        if (token) {
+          console.log('[App] Push Token current:', token);
+          profileService.updatePushToken(session.user.id, token)
+            .then(() => console.log('[App] Token updated in DB ✅'))
+            .catch(err => console.error('[App] Error saving push token:', err));
+        } else {
+          console.log('[App] No token generated ❌');
+        }
+      });
+
+      // 2. Foreground — tidak perlu tampilkan apa-apa
+      const foregroundListener = notificationService.addNotificationReceivedListener(notification => {
+        console.log('[App] Foreground Notification (silent):', notification.request.content.title);
+      });
+
+      // 3. Handle Klik Notifikasi (background/foreground)
+      const responseListener = notificationService.addNotificationResponseReceivedListener(response => {
+        console.log('[App] Notification diklik!');
+        const data = response.notification.request.content.data;
+        if (data?.announcementId) {
+          navigateToAnnouncement(data.announcementId);
+        }
+      });
+
+      // 4. Cold Start — cek apakah app dibuka dari notifikasi
+      Notifications.getLastNotificationResponseAsync().then(response => {
+        if (response) {
+          console.log('[App] Cold Start — app dibuka dari notifikasi!');
+          const data = response.notification.request.content.data;
+          if (data?.announcementId) {
+            navigateToAnnouncement(data.announcementId);
+          }
+        }
+      });
+
+      return () => {
+        notificationService.removeNotificationSubscription(foregroundListener);
+        notificationService.removeNotificationSubscription(responseListener);
+      };
+    }
+  }, [session, hasProfile]);
+
+  // Fungsi pengecekan profil
+  const checkUserProfile = async (userId) => {
+    setIsProfileChecking(true);
+    try {
+      const profile = await profileService.getProfile(userId);
+      setHasProfile(!!profile);
+    } catch (error) {
+      console.error('Check Profile Error:', error);
+      setHasProfile(false);
+    } finally {
+      setIsProfileChecking(false);
+    }
+  };
 
   useEffect(() => {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session?.user) {
+        checkUserProfile(session.user.id);
+      } else {
+        setIsProfileChecking(false);
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (session?.user) {
+        checkUserProfile(session.user.id);
+      } else {
+        setHasProfile(false);
+        setIsProfileChecking(false);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    // Sembunyikan Splash Native dengan sedikit jeda agar transisi benar-benar mulus
+    // Initialize & Bootstrap SQLite
+    if (Platform.OS !== 'web') {
+      databaseService.bootstrap().catch(err => console.log('DB Bootstrap Error:', err));
+    }
+  }, []);
+
+
+  useEffect(() => {
+    // Sembunyikan Splash Native dengan sedikit jeda
     const timer = setTimeout(() => {
       SplashScreen.hideAsync();
     }, 200);
@@ -90,16 +204,14 @@ export default function App() {
   useEffect(() => {
     let returning = false;
 
-    // Cek apakah web me-redirect balik dengan token login (URL Hash dari Google OAuth)
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (window.location.hash.includes('access_token')) {
         returning = true;
-        setIsShowSplash(false); // Langsung masuk tanpa loading screen tambahan
+        setIsShowSplash(false);
       }
     }
 
     if (!returning) {
-      // Tunggu 3 detik, lalu langsung potong (cut) ke Halaman Utama tanpa efek fade/putih
       const timer = setTimeout(() => {
         setIsShowSplash(false);
       }, 3000);
@@ -109,22 +221,19 @@ export default function App() {
   }, []);
 
   // --- RENDER CLUSTER ---
-  return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#ffffff' }}>
-      <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
-      {isShowSplash ? (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }}>
+  
+  // Tampilan Loading saat cek profil
+  const renderContent = () => {
+    if (isShowSplash || isProfileChecking) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#1e3a8a' }}>
           <Animated.View style={styles.splashContainer}>
-
-            {/* Background Biru Modern */}
             <LinearGradient
               colors={['#1e3a8a', '#1e3a8a', '#3b82f6']}
               style={StyleSheet.absoluteFillObject}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             />
-
-            {/* Konten Tengah */}
             <View style={styles.centerContent}>
               <Image
                 source={require('./assets/logo.svg')}
@@ -132,41 +241,50 @@ export default function App() {
                 contentFit="contain"
                 transition={1000}
               />
-            </View>
-
-            {/* Footer Copyright */}
-            <View style={styles.footer}>
-              <Text style={styles.copyrightText}>
-                © {new Date().getFullYear()} - Powered by Tahseena
-              </Text>
+              {isProfileChecking && (
+                <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 20 }} />
+              )}
             </View>
           </Animated.View>
         </SafeAreaView>
-      ) : currentScreen === 'interactive' ? (
-        <InteractiveQuranScreen 
-          session={session} 
-          onBack={() => setCurrentScreen('home')} 
-        />
-      ) : currentScreen === 'admin' ? (
-        <AdminScreen 
-          session={session} 
-          onBack={() => setCurrentScreen('home')} 
-        />
-      ) : currentScreen === 'pengajar' ? (
-        <PengajarScreen 
-          session={session} 
-          onBack={() => setCurrentScreen('home')} 
-        />
-      ) : (
-        <HomeScreen 
-          session={session} 
-          onNavigate={(screen) => setCurrentScreen(screen)} 
-        />
-      )}
+      );
+    }
 
-      {/* Global Toast Component */}
-      <Toast config={toastConfig} />
-    </SafeAreaProvider>
+    // Jika sudah login tapi BELUM punya profil
+    if (session && !hasProfile) {
+      return (
+        <ProfileSetupScreen 
+          onProfileComplete={() => setHasProfile(true)} 
+        />
+      );
+    }
+
+    // Alur Normal (Home / Tabs)
+    return (
+      <NavigationContainer ref={navigationRef}>
+        <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
+          <Stack.Screen name="MainTabs">
+            {props => <MainTabs {...props} session={session} />}
+          </Stack.Screen>
+          <Stack.Screen name="Interactive">
+            {props => <InteractiveQuranScreen {...props} session={session} />}
+          </Stack.Screen>
+          <Stack.Screen name="AnnouncementDetail">
+            {props => <AnnouncementDetailScreen {...props} />}
+          </Stack.Screen>
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  };
+
+  return (
+    <ThemeProvider>
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: '#1e3a8a' }}>
+        <StatusBar style="light" backgroundColor="#1e3a8a" translucent={false} />
+        {renderContent()}
+        <Toast config={toastConfig} />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 
@@ -177,43 +295,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  customToast: {
-    flexDirection: 'row',
-    width: screenWidth * 0.9,
-    padding: 20,
-    borderRadius: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-    marginHorizontal: 20,
-  },
-  toastIconBox: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  toastContent: {
-    flex: 1,
-  },
-  toastText1: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  toastText2: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
+
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',

@@ -1,260 +1,368 @@
 import { useHome } from '../hooks/useHome';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Platform, Animated, Dimensions, ScrollView, TouchableOpacity, Modal, TextInput, Alert, LayoutAnimation } from 'react-native';
+import { StyleSheet, Text, View, Platform, Animated, Dimensions, ScrollView, TouchableOpacity, LayoutAnimation } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import HomeHeader from '../components/HomeHeader';
-import Toast from 'react-native-toast-message';
+import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../context/ThemeContext';
+import Toast from 'react-native-toast-message';
 
-// Harus dipanggil sekali di tingkat global (untuk support Web dan handle penutupan tab)
-WebBrowser.maybeCompleteAuthSession();
-export default function HomeScreen({ onNavigate, session }) {
+// Modul Home
+
+
+const SLIDER_DATA = [
+  {
+    id: '1',
+    title: 'Pembaruan I-QLab v2.0',
+    desc: 'Nikmati antarmuka baru yang lebih elegan dan super cepat!',
+    image: 'https://images.unsplash.com/photo-1609599006353-e629aaab31f5?q=80&w=800&auto=format&fit=crop',
+    icon: 'zap'
+  },
+  {
+    id: '2',
+    title: 'Kajian Rutin Mingguan',
+    desc: 'Setiap Jumat Ba\'da Maghrib. Jangan sampai terlewat!',
+    image: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?q=80&w=800&auto=format&fit=crop',
+    icon: 'users'
+  },
+  {
+    id: '3',
+    title: 'Fitur Quran Interaktif',
+    desc: 'Baca, dengar, dan pelajari makna ayat dengan lebih mudah.',
+    image: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?q=80&w=800&auto=format&fit=crop',
+    icon: 'book-open'
+  }
+];
+
+export default function HomeScreen({ navigation, session }) {
   const insets = useSafeAreaInsets();
-  
+  const { isDarkMode, setIsDarkMode } = useTheme(); // Menggunakan Global State
+
+  const theme = isDarkMode ? {
+    bgFull: '#0f172a',
+    bgStart: '#0f172a',
+    bgEnd: '#0f172a',
+    topBarBg: '#0f172a',
+    toggleBg: '#1e293b',
+    toggleBorder: 'transparent',
+    textMain: '#f8fafc',
+    textSub: '#94a3b8',
+    cardBg: '#1e293b',
+    divider: '#334155',
+    iconBgBlue: 'rgba(99, 102, 241, 0.2)',
+    iconBgPink: 'rgba(219, 39, 119, 0.2)',
+    iconColBlue: '#818cf8',
+    iconColPink: '#f472b6',
+  } : {
+    bgFull: '#f1f5f9',
+    bgStart: '#f1f5f9',
+    bgEnd: '#f1f5f9',
+    topBarBg: '#f1f5f9',
+    toggleBg: '#f8fafc',
+    toggleBorder: 'transparent',
+    textMain: '#0f172a',
+    textSub: '#64748b',
+    cardBg: '#ffffff',
+    divider: '#f1f5f9',
+    iconBgBlue: '#eef2ff',
+    iconBgPink: '#fdf2f8',
+    iconColBlue: '#6366f1',
+    iconColPink: '#db2777',
+  };
+
+  const onNavigate = (screen) => {
+    if (screen === 'interactive') navigation.navigate('Interactive');
+    else if (screen === 'profile') navigation.navigate('Profile');
+    else navigation.navigate('Home');
+  };
+
   const {
-    showProfileModal,
-    setShowProfileModal,
-    showAdminHub,
-    setShowAdminHub,
-    age, setAge,
-    gender, setGender,
     checkAuth,
-    handleAuth,
-    saveProfileData,
     dotOpacity,
+    announcements,
+    isLoadingAnnouncements,
     translateX
   } = useHome(session, onNavigate);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }}>
-      <View style={styles.container}>
-
-      {/* Header Card Component */}
-      <HomeHeader 
-        translateX={translateX}
-        onLogoLongPress={() => setShowAdminHub(true)}
-      />
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
-        {/* MENU CARD */}
-        <View style={styles.cardContainer}>
-          {/* Main Card Content */}
-          <View style={styles.menuCard}>
-            <Text style={styles.helloText}>Ahlan Bikum! 👋</Text>
-            <Text style={styles.subtitleMenuText}>PILIH MENU UTAMA ANDA :</Text>
-
-            {/* Menu Buttons */}
-            <TouchableOpacity style={styles.menuBtn} activeOpacity={0.8} onPress={() => onNavigate && onNavigate('interactive')}>
-              <LinearGradient colors={['#4f46e5', '#3b82f6']} style={StyleSheet.absoluteFill} borderRadius={16} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <View style={styles.menuIconBox}><Feather name="book-open" size={20} color="white" /></View>
-              <Text style={styles.menuBtnText}>Interactive Quran</Text>
-              <Feather name="chevron-right" size={20} color="white" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuBtn} 
-              activeOpacity={0.8} 
-              onPress={() => checkAuth(() => console.log('Tajwid Interactive'))}
-            >
-              <LinearGradient colors={['#b91c1c', '#d946ef', '#9333ea']} locations={[0, 0.1, 1]} style={StyleSheet.absoluteFill} borderRadius={16} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <View style={styles.menuIconBox}><FontAwesome5 name="graduation-cap" size={16} color="white" /></View>
-              <Text style={styles.menuBtnText}>Tajwid Interactive</Text>
-              <Feather name="chevron-right" size={20} color="white" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuBtn} 
-              activeOpacity={0.8}
-              onPress={() => checkAuth(() => console.log('Hadist'))}
-            >
-              <LinearGradient colors={['#059669', '#10b981']} style={StyleSheet.absoluteFill} borderRadius={16} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <View style={styles.menuIconBox}><Feather name="book" size={20} color="white" /></View>
-              <Text style={styles.menuBtnText}>Hadist</Text>
-              <Feather name="chevron-right" size={20} color="white" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuBtn} 
-              activeOpacity={0.8}
-              onPress={() => checkAuth(() => console.log('Fiqih'))}
-            >
-              <LinearGradient colors={['#d97706', '#ea580c']} style={StyleSheet.absoluteFill} borderRadius={16} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <View style={styles.menuIconBox}><FontAwesome5 name="building" size={18} color="white" /></View>
-              <Text style={styles.menuBtnText}>Fiqih 4 Madzhab</Text>
-              <Feather name="chevron-right" size={20} color="white" />
-            </TouchableOpacity>
-
-
-            {/* Small Action Buttons */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.actionBtnYellow}>
-                <Feather name="heart" size={16} color="#d97706" />
-                <Text style={styles.actionBtnTextYellow}>Gratitude</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtnPink}>
-                <FontAwesome5 name="coins" size={14} color="#be123c" />
-                <Text style={styles.actionBtnTextPink}>Support Kami</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Google Login / Logout Button */}
-            <TouchableOpacity style={styles.googleBtn} onPress={handleAuth}>
-              {session ? (
-                <>
-                  <Feather name="log-out" size={18} color="#ef4444" />
-                  <Text style={[styles.googleBtnText, { color: '#ef4444' }]}>Logout</Text>
-                </>
-              ) : (
-                <>
-                  <FontAwesome5 name="google" size={18} color="#ea4335" />
-                  <Text style={styles.googleBtnText}>Login via Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bgFull }}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <View style={[styles.container, { backgroundColor: theme.bgFull }]}>
+        
+        {/* MODERN GEOMETRIC BACKGROUND */}
+        <LinearGradient 
+          colors={[theme.bgStart, theme.bgEnd]} 
+          style={StyleSheet.absoluteFill} 
+        />
+        
+        {/* FIXED TOP BAR */}
+        <View style={[styles.fixedTopBar, { backgroundColor: theme.topBarBg }]}>
+          <View>
+            <Text style={[styles.greetingText, { color: theme.textMain }]}>Ahlan wa Sahlan! 👋</Text>
+            <Text style={[styles.appNameText, { color: theme.textSub }]}>Mau belajar apa hari ini?</Text>
           </View>
-
-          {/* Floating Avatar User (Blue Circle on left edge) */}
-          <View style={styles.floatingAvatar}>
-            <FontAwesome5 name="user-alt" size={18} color="white" />
-          </View>
+          <TouchableOpacity 
+            style={[styles.darkModeToggle, { backgroundColor: theme.toggleBg, borderColor: theme.toggleBorder }]} 
+            onPress={() => setIsDarkMode(!isDarkMode)}
+            activeOpacity={0.7}
+          >
+            <Feather name={isDarkMode ? "sun" : "moon"} size={22} color={isDarkMode ? "#eab308" : "#64748b"} />
+          </TouchableOpacity>
         </View>
 
-      </ScrollView>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={styles.scrollContent}
+        >
 
-      {/* BOTTOM FOOTER */}
-      <View style={[styles.bottomFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <View style={styles.statusPill}>
-          <Animated.View style={[styles.statusDot, { opacity: dotOpacity }]} />
-          <Text style={styles.statusText}>SIAP UNTUK BELAJAR</Text>
-        </View>
-        <Text style={styles.footerCopyright}>© 2026 - Powered by Tahseena</Text>
-      </View>
-
-
-      {/* MODAL LENGKAPI PROFIL */}
-      <Modal visible={showProfileModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Lengkapi Profil Kamu</Text>
-            <Text style={styles.modalDesc}>Sebelum lanjut, kasih tau kita dulu ya biar pembelajarannya sesuai dengan kamu!</Text>
-
-            {/* Informasi Akun Google Terhubung */}
-            {session?.user && (
-              <View style={styles.googleInfoContainer}>
-                <View style={styles.infoRow}>
-                  <Feather name="user" size={16} color="#64748b" />
-                  <Text style={styles.infoText}>{session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Nama Tidak Tersedia'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Feather name="mail" size={16} color="#64748b" />
-                  <Text style={styles.infoText}>{session.user.email || 'Email Tidak Tersedia'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Feather name="phone" size={16} color="#64748b" />
-                  <Text style={styles.infoText}>{session.user.phone || session.user.user_metadata?.phone || 'No. HP Tidak Terdaftar di Google'}</Text>
-                </View>
+          {/* SLIDER INFORMASI TERBARU */}
+          <View style={styles.sliderContainer}>
+            {isLoadingAnnouncements ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sliderContent}>
+                {[1, 2].map((i) => (
+                  <View key={i} style={[styles.sliderCard, { backgroundColor: theme.cardBg, marginRight: 14, overflow: 'hidden' }]}>
+                     <Animated.View 
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                          transform: [{ translateX }]
+                        }
+                      ]}
+                    />
+                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.2)']} style={StyleSheet.absoluteFill} />
+                  </View>
+                ))}
+              </ScrollView>
+            ) : announcements.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={Dimensions.get('window').width - 40 + 14} 
+                decelerationRate="fast"
+                contentContainerStyle={styles.sliderContent}
+              >
+                {announcements.map((item, index) => {
+                  const isLast = index === announcements.length - 1;
+                  return (
+                    <TouchableOpacity 
+                      key={item.id} 
+                      activeOpacity={0.9} 
+                      style={[styles.sliderCard, { marginRight: isLast ? 0 : 14 }]}
+                      onPress={() => navigation.navigate('AnnouncementDetail', { announcement: item })}
+                    >
+                      {/* Gambar Background dari Supabase */}
+                      <Image 
+                        source={{ uri: item.image_url }} 
+                        style={StyleSheet.absoluteFill} 
+                        contentFit="cover" 
+                        transition={500} 
+                      />
+                      
+                      {/* Gradient Overlay Gelap agar teks tetap terbaca jelas */}
+                      <LinearGradient 
+                        colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.8)']} 
+                        style={StyleSheet.absoluteFill} 
+                      />
+                      
+                      <View style={styles.sliderCardContent}>
+                        <View style={[styles.sliderIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                          <Feather name={item.icon || 'megaphone'} size={22} color="#ffffff" />
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 16 }}>
+                          <View style={[styles.sliderBadge, { backgroundColor: '#4f46e5' }]}>
+                            <Text style={styles.sliderBadgeText}>Terbaru</Text>
+                          </View>
+                          <Text style={styles.sliderTitle} numberOfLines={1}>{item.title}</Text>
+                          <Text style={styles.sliderDesc} numberOfLines={2}>{item.summary}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              /* EMPTY STATE PREMIUM */
+              <View style={styles.sliderContent}>
+                <LinearGradient 
+                  colors={[isDarkMode ? '#1e293b' : '#ffffff', isDarkMode ? '#0f172a' : '#f8fafc']}
+                  style={[styles.sliderCard, { borderWidth: 1, borderColor: theme.divider, justifyContent: 'center', alignItems: 'center' }]}
+                >
+                  <View style={[styles.sliderIconBox, { backgroundColor: theme.iconBgBlue, marginBottom: 12 }]}>
+                    <Feather name="smile" size={24} color={theme.iconColBlue} />
+                  </View>
+                  <Text style={[styles.sliderTitle, { color: theme.textMain, fontSize: 16 }]}>Belum ada pengumuman baru</Text>
+                  <Text style={[styles.sliderDesc, { color: theme.textSub, textAlign: 'center' }]}>Tetap semangat belajar Al-Quran hari ini ya! ✨</Text>
+                </LinearGradient>
               </View>
             )}
+          </View>
 
-            <Text style={styles.label}>Berapa Usia Kamu?</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Contoh: 25"
-              keyboardType="number-pad"
-              value={age}
-              onChangeText={setAge}
+          {/* PEMBATAS ELEGAN (Fading Gradient Divider) */}
+          <View style={styles.sectionDividerContainer}>
+            <LinearGradient 
+              colors={['rgba(79, 70, 229, 0)', 'rgba(79, 70, 229, 0.25)', 'rgba(79, 70, 229, 0)']} 
+              start={{ x: 0, y: 0 }} 
+              end={{ x: 1, y: 0 }} 
+              style={styles.sectionDivider} 
             />
+          </View>
 
-            <Text style={styles.label}>Jenis Kelamin</Text>
-            <View style={styles.genderRow}>
-              <TouchableOpacity
-                style={[styles.genderBtn, gender === 'Laki-laki' && styles.genderBtnActive]}
-                onPress={() => setGender('Laki-laki')}
+          {/* MAIN BENTO GRID - COMPACT */}
+          <View style={styles.bentoGrid}>
+            
+            {/* 1. Interactive Quran - WIDE CARD (Matching Doa-doa Pilihan) */}
+            <TouchableOpacity 
+              style={styles.cardWide} 
+              activeOpacity={0.9} 
+              onPress={() => onNavigate && onNavigate('interactive')}
+            >
+              <LinearGradient 
+                colors={['#1e40af', '#3b82f6']} 
+                style={StyleSheet.absoluteFill} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 0 }} 
+              />
+              <View style={styles.cardRowContent}>
+                <View style={styles.iconBoxMain}>
+                  <Feather name="book-open" size={20} color="white" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitleLarge}>Interactive Quran</Text>
+                  <Text style={styles.cardDescLight}>Baca, Tadabbur & Dengar</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="white" />
+              </View>
+            </TouchableOpacity>
+
+            {/* 2. Hadist Harian - WIDE CARD */}
+            <TouchableOpacity 
+              style={styles.cardWide} 
+              activeOpacity={0.9}
+              onPress={() => Toast.show({ type: 'info', text1: 'Segera Hadir!', text2: 'Fitur Hadist Harian sedang kami siapkan.', position: 'bottom' })}
+            >
+              <LinearGradient 
+                colors={['#059669', '#34d399']} 
+                style={StyleSheet.absoluteFill} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 0 }} 
+              />
+              <View style={styles.cardRowContent}>
+                <View style={styles.iconBoxMain}>
+                  <Feather name="feather" size={20} color="white" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitleLarge}>Hadist Harian</Text>
+                  <Text style={styles.cardDescLight}>Inspirasi dari sabda Rasulullah</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="white" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.gridRow}>
+              {/* 3. Zikir Pagi */}
+              <TouchableOpacity 
+                style={styles.cardHalf} 
+                activeOpacity={0.9}
+                onPress={() => Toast.show({ type: 'info', text1: 'Segera Hadir!', text2: 'Fitur Zikir Pagi sedang kami siapkan.', position: 'bottom' })}
               >
-                <FontAwesome5 name="male" size={24} color={gender === 'Laki-laki' ? 'white' : '#64748b'} />
-                <Text style={[styles.genderText, gender === 'Laki-laki' && styles.genderTextActive]}>Laki-laki</Text>
+                <Image 
+                  source={require('../../assets/zikirpagi.png')} 
+                  style={StyleSheet.absoluteFill} 
+                  contentFit="cover" 
+                />
+                <LinearGradient 
+                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.7)']} 
+                  style={StyleSheet.absoluteFill} 
+                />
+                <View style={[styles.iconBoxSmall, { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                  <Feather name="sunrise" size={20} color="white" />
+                </View>
+                <Text style={styles.cardTitleMedium}>Zikir Pagi</Text>
+                <Text style={styles.cardDescSmall}>Al Ma'tsurat</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.genderBtn, gender === 'Perempuan' && styles.genderBtnActive]}
-                onPress={() => setGender('Perempuan')}
+              {/* 4. Zikir Petang */}
+              <TouchableOpacity 
+                style={styles.cardHalf} 
+                activeOpacity={0.9}
+                onPress={() => Toast.show({ type: 'info', text1: 'Segera Hadir!', text2: 'Fitur Zikir Petang sedang kami siapkan.', position: 'bottom' })}
               >
-                <FontAwesome5 name="female" size={24} color={gender === 'Perempuan' ? 'white' : '#64748b'} />
-                <Text style={[styles.genderText, gender === 'Perempuan' && styles.genderTextActive]}>Perempuan</Text>
+                <Image 
+                  source={require('../../assets/zikirpetang.png')} 
+                  style={StyleSheet.absoluteFill} 
+                  contentFit="cover" 
+                />
+                <LinearGradient 
+                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.7)']} 
+                  style={StyleSheet.absoluteFill} 
+                />
+                <View style={[styles.iconBoxSmall, { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                  <Feather name="sunset" size={20} color="white" />
+                </View>
+                <Text style={styles.cardTitleMedium}>Zikir Petang</Text>
+                <Text style={styles.cardDescSmall}>Al Ma'tsurat</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={saveProfileData}>
-              <Text style={styles.saveBtnText}>Simpan Data</Text>
+            {/* 5. Doa-doa Pilihan */}
+            <TouchableOpacity 
+              style={styles.cardWide} 
+              activeOpacity={0.9}
+              onPress={() => Toast.show({ type: 'info', text1: 'Segera Hadir!', text2: 'Kumpulan doa pilihan sedang kami siapkan.', position: 'bottom' })}
+            >
+              <LinearGradient 
+                colors={['#7c3aed', '#a78bfa']} 
+                style={StyleSheet.absoluteFill} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 0 }} 
+              />
+              <View style={styles.cardRowContent}>
+                <View style={styles.iconBoxMain}>
+                  <FontAwesome5 name="hands" size={18} color="white" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitleLarge}>Doa-doa Pilihan</Text>
+                  <Text style={styles.cardDescLight}>Kumpulan doa mustajab</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="white" />
+              </View>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-      {/* MODAL INTERNAL ACCESS HUB (HIDDEN GESTURE) */}
-      <Modal
-        visible={showAdminHub}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowAdminHub(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{flex: 1}} activeOpacity={1} onPress={() => setShowAdminHub(false)} />
-          <View style={styles.adminModalContent}>
-             <View style={styles.modalDragIndicator} />
-             
-             <View style={styles.adminModalHeader}>
-                <View style={styles.adminIconCircle}>
-                   <Feather name="shield" size={24} color="#fbbf24" />
+          {/* SECONDARY ACTIONS - MODERN LIST STYLE */}
+          <View style={styles.otherSection}>
+            <Text style={[styles.subSectionTitle, { color: theme.textSub }]}>Pengaturan & Info</Text>
+            <View style={[styles.otherMenuContainer, { backgroundColor: theme.cardBg }]}>
+              
+              <TouchableOpacity style={styles.otherMenuItem} activeOpacity={0.6}>
+                <View style={[styles.otherIconBox, { backgroundColor: theme.iconBgBlue }]}>
+                  <Feather name="info" size={18} color={theme.iconColBlue} />
                 </View>
-                <Text style={styles.adminModalTitle}>Internal Access Hub</Text>
-                <Text style={styles.adminModalSubtitle}>Halaman akses terbatas untuk tim I-Qlab.</Text>
-             </View>
+                <Text style={[styles.otherMenuText, { color: theme.textMain }]}>Tentang I-QLab</Text>
+                <Feather name="chevron-right" size={16} color={theme.textSub} />
+              </TouchableOpacity>
 
-             <View style={styles.adminHubGrid}>
-                <TouchableOpacity 
-                  style={styles.adminHubCard} 
-                  onPress={() => {
-                    setShowAdminHub(false);
-                    setTimeout(() => onNavigate('admin'), 300);
-                  }}
-                >
-                   <LinearGradient colors={['#1e293b', '#0f172a']} style={StyleSheet.absoluteFill} borderRadius={20} />
-                   <View style={styles.adminHubCardIcon}><Feather name="lock" size={20} color="#fbbf24" /></View>
-                   <Text style={styles.adminHubCardText}>Admin Area</Text>
-                </TouchableOpacity>
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
 
-                <TouchableOpacity 
-                  style={styles.adminHubCard} 
-                  onPress={() => {
-                    setShowAdminHub(false);
-                    setTimeout(() => onNavigate('pengajar'), 300);
-                  }}
-                >
-                   <LinearGradient colors={['#0f766e', '#134e4a']} style={StyleSheet.absoluteFill} borderRadius={20} />
-                   <View style={styles.adminHubCardIcon}><Feather name="book-open" size={20} color="white" /></View>
-                   <Text style={styles.adminHubCardText}>Pengajar Hub</Text>
-                </TouchableOpacity>
-             </View>
+              <TouchableOpacity style={styles.otherMenuItem} activeOpacity={0.6}>
+                <View style={[styles.otherIconBox, { backgroundColor: theme.iconBgPink }]}>
+                  <FontAwesome5 name="hand-holding-heart" size={16} color={theme.iconColPink} />
+                </View>
+                <Text style={[styles.otherMenuText, { color: theme.textMain }]}>Infaq & Dukungan</Text>
+                <Feather name="chevron-right" size={16} color={theme.textSub} />
+              </TouchableOpacity>
 
-             <TouchableOpacity 
-               style={styles.closeAdminBtn} 
-               onPress={() => setShowAdminHub(false)}
-             >
-                <Text style={styles.closeAdminBtnText}>Kembali</Text>
-             </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+
+        </ScrollView>
+
       </View>
     </SafeAreaView>
   );
@@ -263,354 +371,254 @@ export default function HomeScreen({ onNavigate, session }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f5f9', // Warna body background sedikit abu-abu muda
+    backgroundColor: '#f1f5f9',
   },
-  scrollContent: {
-    paddingBottom: 40,
+  backgroundSvg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fixedTopBar: {
     paddingHorizontal: 20,
-    paddingTop: 32, // Tambah jarak atas biar tidak mepet
-  },
-  cardContainer: {
-    position: 'relative',
-  },
-  menuCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 24,
-    borderLeftWidth: 5,
-    borderLeftColor: '#3b82f6',
-    // Shadow ringan
-    shadowColor: '#94a3b8',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 5,
-  },
-  helloText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  subtitleMenuText: {
-    fontSize: 13,
-    color: '#94a3b8',
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-    marginBottom: 20,
-  },
-  menuBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  menuIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  menuBtnText: {
-    flex: 1,
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: 'bold',
-  },
-  actionRow: {
+    paddingTop: 24,
+    paddingBottom: 16,
+    backgroundColor: '#ffffff', // Solid white to cover scrolled content
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  actionBtnYellow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    width: '48%',
-    justifyContent: 'center',
+    zIndex: 10, // Ensure it stays above ScrollView
   },
-  actionBtnTextYellow: {
-    color: '#d97706',
-    fontWeight: 'bold',
-    fontSize: 15,
-    marginLeft: 8,
-  },
-  actionBtnPink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fce7f3',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    width: '48%',
-    justifyContent: 'center',
-  },
-  actionBtnTextPink: {
-    color: '#be123c',
-    fontWeight: 'bold',
-    fontSize: 15,
-    marginLeft: 8,
-  },
-  googleBtn: {
-    flexDirection: 'row',
+  darkModeToggle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingVertical: 14,
-    borderRadius: 16,
+    borderWidth: 0,
   },
-  googleBtnText: {
-    marginLeft: 10,
-    color: '#334155',
-    fontSize: 17,
-    fontWeight: 'bold',
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 130, 
   },
-  floatingAvatar: {
+  greetingText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+  },
+  appNameText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  sliderContainer: {
+    marginHorizontal: -20, // Tarik keluar dari padding container agar bisa swipe off-screen
+    marginBottom: 24,
+  },
+  sliderContent: {
+    paddingHorizontal: 20,
+  },
+  sliderCard: {
+    width: Dimensions.get('window').width - 40,
+    height: 140,
+    borderRadius: 24,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  sliderCardDeco: {
     position: 'absolute',
-    left: -15, // Supaya menonjol keluar dari sisi kiri card
-    bottom: 40,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2563eb', // Lingkaran biru
+    right: -20,
+    top: -20,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  sliderCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sliderIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#f1f5f9', // Pinggiran abu sesuai body
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowRadius: 8,
     elevation: 3,
   },
-  bottomFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 10, // Shadow di atas
+  sliderBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
   },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+  sliderBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#16a34a',
-    marginRight: 6,
+  sliderTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    letterSpacing: -0.3,
   },
-  statusText: {
-    color: '#16a34a',
+  sliderDesc: {
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 13,
-    fontWeight: 'bold',
+    lineHeight: 18,
   },
-  footerCopyright: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalBox: {
-    width: '100%',
-    backgroundColor: 'white',
-    borderRadius: 24,
-    padding: 24,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalDesc: {
-    fontSize: 15,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  googleInfoContainer: {
-    backgroundColor: '#f8fafc',
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  infoText: {
-    marginLeft: 12,
-    fontSize: 15,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#334155',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: '#f1f5f9',
-    padding: 14,
-    borderRadius: 12,
-    fontSize: 18,
-    color: '#0f172a',
-  },
-  genderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  sectionDividerContainer: {
+    marginBottom: 24,
     marginTop: 8,
-  },
-  genderBtn: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-    padding: 16,
-    borderRadius: 16,
     alignItems: 'center',
-    marginHorizontal: 4,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  genderBtnActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#2563eb',
-  },
-  genderText: {
-    marginTop: 8,
-    fontWeight: 'bold',
-    color: '#64748b',
-  },
-  genderTextActive: {
-    color: 'white',
-  },
-  saveBtn: {
-    backgroundColor: '#10b981',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  saveBtnText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  adminModalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
-    width: '100%',
-  },
-  adminModalHeader: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  adminIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#0f172a',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
   },
-  adminModalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 8,
+  sectionDivider: {
+    height: 2,
+    width: '70%',
+    borderRadius: 1,
   },
-  adminModalSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
+  bentoGrid: {
+    gap: 14,
   },
-  adminHubGrid: {
+  gridRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 30,
+    gap: 14,
   },
-  adminHubCard: {
+  cardHalf: {
     flex: 1,
-    height: 120,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
+    height: 140,
+    borderRadius: 28,
+    padding: 18,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
-  adminHubCardIcon: {
+  cardWide: {
+    height: 90,
+    borderRadius: 24,
+    padding: 18,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#7c3aed',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+  iconBoxMain: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconBoxSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    position: 'absolute',
+    top: 18,
+    left: 18,
   },
-  adminHubCardText: {
-    color: 'white',
-    fontSize: 14,
+  cardTitleLarge: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: -0.5,
   },
-  closeAdminBtn: {
-    backgroundColor: '#f1f5f9',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  closeAdminBtnText: {
-    color: '#64748b',
-    fontWeight: 'bold',
+  cardTitleMedium: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: -0.3,
   },
+  cardDescLight: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+  cardDescSmall: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 3,
+  },
+  cardRowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    zIndex: 1,
+  },
+  otherSection: {
+    marginTop: 24,
+  },
+  subSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 14,
+    paddingLeft: 4,
+  },
+  otherMenuContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  otherMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 14,
+  },
+  otherIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otherMenuText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginHorizontal: 12,
+  },
+
 });

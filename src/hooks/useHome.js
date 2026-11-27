@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Platform, Alert } from 'react-native';
+import { Animated, Dimensions, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
+import { authService } from '../services/authService';
 
 export const useHome = (session, onNavigate) => {
   const shimmerValue = useRef(new Animated.Value(-1)).current;
   const dotOpacity = useRef(new Animated.Value(1)).current;
   const screenWidth = Dimensions.get('window').width;
-
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showAdminHub, setShowAdminHub] = useState(false);
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('');
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -36,11 +30,10 @@ export const useHome = (session, onNavigate) => {
       }
     }
 
-    checkProfile(session?.user);
+    // Pengecekan profil sudah ditangani di App.js menggunakan tabel 'profiles'
+    // Jadi kita tidak perlu lagi mengecek metadata di sini agar tidak terjadi tab-jump.
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-      checkProfile(newSession?.user);
-
       if (event === 'SIGNED_IN') {
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.history.replaceState(null, '', window.location.pathname);
@@ -69,21 +62,6 @@ export const useHome = (session, onNavigate) => {
     return () => subscription.unsubscribe();
   }, [session]);
 
-  const checkProfile = (user) => {
-    if (user) {
-      if (user.user_metadata?.role === 'admin' || user.user_metadata?.role === 'pengajar') {
-         setShowProfileModal(false);
-         return;
-      }
-      if (!user.user_metadata?.age || !user.user_metadata?.gender) {
-        setShowProfileModal(true);
-      } else {
-        setShowProfileModal(false);
-      }
-    } else {
-      setShowProfileModal(false);
-    }
-  };
 
   const checkAuth = (onSuccess) => {
     if (session?.user) {
@@ -99,74 +77,7 @@ export const useHome = (session, onNavigate) => {
     }
   };
 
-  const handleAuth = async () => {
-    if (session) {
-      await supabase.auth.signOut();
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    } else {
-      const redirectUrl = makeRedirectUri({
-        preferLocalhost: false,
-      });
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: Platform.OS !== 'web',
-        }
-      });
-
-      if (error) {
-        if (Platform.OS === 'web') alert(error.message);
-        return;
-      }
-
-      if (Platform.OS !== 'web' && data?.url) {
-        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-
-        if (res.type === 'success' && res.url) {
-          const match = res.url.match(/(?:#|\?)(.*)/);
-          if (match && match[1]) {
-            const urlParams = new URLSearchParams(match[1].replace('?', '&'));
-            const access_token = urlParams.get('access_token');
-            const refresh_token = urlParams.get('refresh_token');
-
-            if (access_token && refresh_token) {
-              await supabase.auth.setSession({ access_token, refresh_token });
-            } else if (urlParams.get('error_description')) {
-              Alert.alert('Gagal', decodeURIComponent(urlParams.get('error_description').replace(/\+/g, ' ')));
-            }
-          }
-        }
-      }
-    }
-  };
-
-  const saveProfileData = async () => {
-    if (!age || !gender) {
-      Toast.show({
-        type: 'error',
-        text1: 'Data Belum Lengkap',
-        text2: 'Tolong pilih Usia dan Jenis Kelamin dulu ya.',
-        position: 'bottom',
-        bottomOffset: 90,
-      });
-      return;
-    }
-
-    const { error } = await supabase.auth.updateUser({
-      data: { age: age, gender: gender }
-    });
-
-    if (error) {
-      Toast.show({ type: 'error', text1: 'Gagal Menyimpan', text2: error.message, position: 'bottom', bottomOffset: 90 });
-    } else {
-      setShowProfileModal(false);
-      Toast.show({ type: 'success', text1: 'Profil Tersimpan!', text2: 'Terima kasih, data kamu sudah masuk.', position: 'bottom', bottomOffset: 90 });
-    }
-  };
 
   useEffect(() => {
     Animated.sequence([
@@ -188,7 +99,66 @@ export const useHome = (session, onNavigate) => {
         Animated.timing(dotOpacity, { toValue: 1, duration: 900, useNativeDriver: true }),
       ])
     ).start();
-  }, [shimmerValue]);
+  }, []);
+
+  const [announcements, setAnnouncements] = useState([]);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Heartbeat: Update jam internal setiap 10 detik
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchAnnouncements = async () => {
+    try {
+      console.log('Fetching announcements (with 5m buffer)...');
+      setIsLoadingAnnouncements(true);
+      
+      // Ambil yang sudah terbit DAN yang akan terbit dalam 5 menit ke depan
+      // (Agar sudah ada di memori HP sebelum waktunya tiba)
+      const futureBuffer = new Date(Date.now() + 5 * 60000).toISOString();
+
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .or('target_audience.eq.semua,target_audience.eq.iqlab')
+        .lte('published_at', futureBuffer)
+        .order('published_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setAnnouncements(data || []);
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+    } finally {
+      setIsLoadingAnnouncements(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+    
+    const channel = supabase
+      .channel('announcements_realtime')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'announcements' }, 
+        () => fetchAnnouncements()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Filter pengumuman yang BENAR-BENAR sudah waktunya tayang (berdasarkan jam HP)
+  const visibleAnnouncements = announcements.filter(item => {
+    return new Date(item.published_at) <= currentTime;
+  });
 
   const translateX = shimmerValue.interpolate({
     inputRange: [-1, 2],
@@ -196,16 +166,11 @@ export const useHome = (session, onNavigate) => {
   });
 
   return {
-    showProfileModal,
-    setShowProfileModal,
-    showAdminHub,
-    setShowAdminHub,
-    age, setAge,
-    gender, setGender,
     checkAuth,
-    handleAuth,
-    saveProfileData,
     dotOpacity,
-    translateX
+    translateX,
+    announcements: visibleAnnouncements, // Kirim yang sudah difilter
+    isLoadingAnnouncements,
+    refreshAnnouncements: fetchAnnouncements
   };
 };
